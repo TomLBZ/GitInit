@@ -1,0 +1,17 @@
+~/project
+    ai
+        git@0.0.0.0:ai/experiment.git
+        git@0.0.0.0:ai/planner.git
+        git@0.0.0.0:ai/db.git
+    robot
+        git@0.0.0.0:robot/bridge.git
+        platform
+            git@0.0.0.0:robot/platform/navigation.git
+    system
+        git@0.0.0.0:system/gateway.git
+        backend
+            git@0.0.0.0:system/backend/module1.git
+            git@0.0.0.0:system/backend/module2.git
+        git@0.0.0.0:system/ui.git
+~/dev
+    git@github.com:TomLBZ/GitInit.git
