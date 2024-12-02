@@ -1,5 +1,5 @@
 # GitInit
-GitInit is a simple tool to help you migrate your complicated project directories and keep them up to date. It will automatically clone the repos according to a directory structure specified in settings.txt.
+GitInit is a simple tool to help you migrate your complicated project directories and keep them up to date. It will automatically clone or pull the repos according to a directory structure specified in settings.txt.
 ## Dependencies
 This tool depends on the following external programs:
 1. git (can be installed via `sudo apt install git` on Ubuntu)
