@@ -3,100 +3,172 @@
 import os
 import subprocess
 import argparse
-from typing import List, Dict, Set, Tuple
+from typing import Dict, Any, Optional, List, Set, Tuple
 
-class RepoInfo:
-    def __init__(self, path: str, git_url: str):
-        self.parent = path
-        self.git = git_url
-        self.name = get_repo_name(git_url)
-        self.fpath = os.path.join(path, self.name)
-        self.isdir = os.path.isdir(self.fpath)
-        self.isgit = os.path.isdir(os.path.join(self.fpath, '.git'))
-
-    def __repr__(self):
-        return f"RepoStatus(parent={self.parent}, git={self.git}, name={self.name}, fpath={self.fpath}, isdir={self.isdir}, isgit={self.isgit})"
-
-    def __str__(self):
-        return f"Repository {self.name} in {self.parent} is{' not' if not self.isdir else ''} a directory and is{' not' if not self.isgit else ''} a git repository"
-
-    def __eq__(self, other):
-        return self.parent == other.parent and self.git == other.git and self.name == other.name and self.fpath == other.fpath and self.isdir == other.isdir and self.isgit == other.isgit
-
-    def __ne__(self, other):
-        return not self.__eq__(other)
-
-    def __hash__(self):
-        return hash((self.parent, self.git, self.name, self.fpath, self.isdir, self.isgit))
-
-    def __getitem__(self, key):
-        return getattr(self, key)
-
-    def __setitem__(self, key, value):
-        return setattr(self, key, value)
-
-    def as_tuple(self):
-        return self.parent, self.git, self.name, self.fpath, self.isdir, self.isgit
-
-    @classmethod
-    def from_dict(cls, d: Dict[str, str]) -> 'RepoInfo':
-        return cls(d['parent'], d['git'], d['name'], d['fpath'], d['isdir'], d['isgit'])
-
-    def to_dict(self) -> Dict[str, str]:
-        return {
-            'parent': self.parent,
-            'git': self.git,
-            'name': self.name,
-            'fpath': self.fpath,
-            'isdir': self.isdir,
-            'isgit': self.isgit
-        }
-
-def get_repo_name(git_url: str) -> str:
-    repo_name: str = git_url.rstrip('.git').split('/')[-1]
+def get_repo_name(git_url):
+    repo_name = git_url.rstrip('.git').split('/')[-1]
     if ':' in repo_name:
-        repo_name: str = repo_name.split(':')[-1]
+        repo_name = repo_name.split(':')[-1]
     return repo_name
 
+def get_repo_status(repo: Dict[str, str]) -> Dict[str, Any]:
+    """
+    Returns a dictionary with repository status information.
+    """
+    parent_dir = repo['path']
+    git_url = repo['git_url']
+    repo_name = get_repo_name(git_url)
+    full_repo_path = os.path.join(parent_dir, repo_name)
+    exists = os.path.isdir(full_repo_path)
+    is_git_repo = os.path.isdir(os.path.join(full_repo_path, '.git'))
+    existing_git_url = None
+    if is_git_repo:
+        existing_git_url = get_existing_remote_url(full_repo_path)
+    return {
+        'parent_dir': parent_dir,
+        'git_url': git_url,
+        'repo_name': repo_name,
+        'full_repo_path': full_repo_path,
+        'exists': exists,
+        'is_git_repo': is_git_repo,
+        'existing_git_url': existing_git_url
+    }
+
+def get_existing_remote_url(full_repo_path: str) -> Optional[str]:
+    try:
+        output = subprocess.check_output(
+            ['git', '-C', full_repo_path, 'config', '--get', 'remote.origin.url']
+        )
+        return output.decode().strip()
+    except subprocess.CalledProcessError:
+        return None
+
+def run_git_command(repo_path: str, args: List[str], error_message: str) -> bool:
+    try:
+        subprocess.check_call(['git'] + args, cwd=repo_path)
+        return True
+    except subprocess.CalledProcessError:
+        print(error_message)
+        return False
+
+def clone_repo(repo: Dict[str, str], force: bool = False) -> None:
+    repo_status = get_repo_status(repo)
+    parent_dir = repo_status['parent_dir']
+    git_url = repo_status['git_url']
+    repo_name = repo_status['repo_name']
+    full_repo_path = repo_status['full_repo_path']
+    exists = repo_status['exists']
+    is_git_repo = repo_status['is_git_repo']
+    existing_git_url = repo_status['existing_git_url']
+
+    if exists:
+        if force:
+            # Remove the existing directory
+            try:
+                subprocess.check_call(['rm', '-rf', full_repo_path])
+                print(f"Removed existing directory {full_repo_path}")
+                exists = False  # Directory has been removed
+            except subprocess.CalledProcessError:
+                print(f"Error removing directory {full_repo_path}, skipping clone")
+                return
+        elif is_git_repo and existing_git_url == git_url:
+            print(f"Repository {repo_name} already exists and has the same remote, skipping")
+            return
+        elif is_git_repo:
+            print(f"Repository {repo_name} already exists but has a different remote URL")
+            return
+        else:
+            print(f"Directory {full_repo_path} exists but is not a git repository, skipping")
+            return
+
+    # Clone the repository
+    if run_git_command(parent_dir, ['clone', git_url], f"Error cloning repository {repo_name}"):
+        print(f"Cloned repository {repo_name} into {parent_dir}")
+
+def pull_repo(repo: Dict[str, str], force: bool = False) -> None:
+    repo_status = get_repo_status(repo)
+    full_repo_path = repo_status['full_repo_path']
+    repo_name = repo_status['repo_name']
+    exists = repo_status['exists']
+    is_git_repo = repo_status['is_git_repo']
+
+    if exists and is_git_repo:
+        if force:
+            # Discard local changes
+            if run_git_command(full_repo_path, ['stash'], f"Error stashing changes in {repo_name}"):
+                run_git_command(full_repo_path, ['stash', 'drop'], f"Error dropping stash in {repo_name}")
+        if run_git_command(full_repo_path, ['pull'], f"Error pulling repository {repo_name}, skipping"):
+            print(f"Pulled latest changes for repository {repo_name}")
+    elif exists:
+        print(f"Directory {full_repo_path} exists but is not a git repository, skipping")
+    else:
+        print(f"Repository directory {full_repo_path} does not exist, skipping pull")
+
 def get_args() -> argparse.Namespace:
-    parser: argparse.ArgumentParser = argparse.ArgumentParser(description='GitInit tool')
+    parser = argparse.ArgumentParser(description='GitInit tool')
     parser.add_argument('settings_file', nargs='?', default='settings.txt', help='Settings file')
+    parser.add_argument('--clone', '-c', action='store_true', help='Clones the repositories specified in the settings file.')
     parser.add_argument('--pull', '-p', action='store_true', help='Pulls the latest changes from the remote repository.')
-    parser.add_argument('--forcepull', '-fp', action='store_true', help='Discards local changes and pulls the latest changes from the remote repository.')
+    parser.add_argument('--force', '-f', action='store_true', help='Adds a flag to overwrite existing directories or discard local changes.')
     return parser.parse_args()
 
-def get_dirs_and_repoinfos_from_settings(settings_file: str) -> Tuple[Set[str], List[RepoInfo]]:
-    dirs_to_create: Set[str] = set()
-    git_repos: List[RepoInfo] = []
-    stack: List[str] = []
+def get_dirs_and_repos_from_settings(settings_file: str) -> Tuple[Set[str], List[Dict[str, str]]]:
+    dirs_to_create = set()
+    git_repos = []
+    stack = []
+    indent_levels = []
+
     with open(settings_file, 'r') as f:
         for line in f:
             line = line.rstrip('\n')
             if not line.strip():
                 continue  # skip empty lines
-            indent: int = len(line) - len(line.lstrip(' '))
-            indent_level: int = indent // 4
-            content: str = line.strip()
-            # Adjust stack to match the current indent level
-            while len(stack) > indent_level:
+            # Get the leading whitespace (spaces or tabs)
+            leading_whitespace = line[:len(line) - len(line.lstrip())]
+            indent_length = len(leading_whitespace.expandtabs(4))  # Convert tabs to spaces (tab size = 4)
+            content = line.strip()
+            if not indent_levels:
+                # This is the first line
+                indent_levels.append(indent_length)
+            elif indent_length > indent_levels[-1]:
+                # Indentation increased
+                indent_levels.append(indent_length)
+            else:
+                # Indentation decreased or same
+                while indent_levels and indent_length < indent_levels[-1]:
+                    indent_levels.pop()
+                    stack.pop()
+                if indent_levels and indent_length != indent_levels[-1]:
+                    # Indentation level does not match any existing level, append new level
+                    indent_levels.append(indent_length)
+            # Adjust the stack to match the current indentation level
+            while len(stack) > len(indent_levels) - 1:
                 stack.pop()
             stack.append(content)
             # Now construct the path
             if '.git' in content or content.startswith('git@') or content.startswith('https://'):
                 # This is a git repository
                 # The parent path is the current stack
-                path: str = os.path.join(*stack[:-1])
-                git_url: str = content
+                path = os.path.join(*stack[:-1])
+                git_url = content
                 # Ensure directory is added
                 dirs_to_create.add(path)
-                git_repos.append(RepoInfo(path, git_url))
+                git_repos.append({
+                    'path': path,
+                    'git_url': git_url
+                })
             else:
                 # This is a directory
-                path: str = os.path.join(*stack)
+                path = os.path.join(*stack)
                 dirs_to_create.add(path)
     return dirs_to_create, git_repos
 
-def create_directories(dirs_to_create: Set[str]) -> None:
+def main():
+    args = get_args()
+    settings_file = args.settings_file
+    dirs_to_create, git_repos = get_dirs_and_repos_from_settings(settings_file)
+
+    # Create directories
     for directory in sorted(dirs_to_create):
         if not os.path.exists(directory):
             os.makedirs(directory)
@@ -104,60 +176,15 @@ def create_directories(dirs_to_create: Set[str]) -> None:
         else:
             print(f"Directory {directory} already exists")
 
-def clone_repo(repo: RepoInfo) -> None:
-    if repo.isdir:
-        if repo.isgit:
-            try: # Get the remote URL
-                output = subprocess.check_output(['git', '-C', repo.fpath, 'config', '--get', 'remote.origin.url'])
-                existing_git_url = output.decode().strip()
-                if existing_git_url == repo.git:
-                    print(f"Repository {repo.name} already exists and has the same remote, skipping")
-                else:
-                    print(f"Repository {repo.name} already exists but has a different remote URL")
-            except subprocess.CalledProcessError:
-                print(f"Error checking remote URL for repository {repo.name}, skipping")
-        else:
-            print(f"Directory {repo.fpath} exists but is not a git repository, skipping")
-    else:
-        # Clone the repository
-        try:
-            subprocess.check_call(['git', 'clone', repo.git], cwd=repo.parent)
-            print(f"Cloned repository {repo.name} into {repo.parent}")
-        except subprocess.CalledProcessError:
-            print(f"Error cloning repository {repo.name}")
-
-def pull_repo(repo: RepoInfo, force: bool = False) -> None:
-    if repo.isdir:
-        if repo.isgit:
-            try: # Perform git pull
-                if force: # Discard local changes
-                    subprocess.check_call(['git', 'stash'], cwd=repo.fpath)
-                    subprocess.check_call(['git', 'stash', 'drop'], cwd=repo.fpath)
-                subprocess.check_call(['git', 'pull'], cwd=repo.fpath)
-                print(f"Pulled latest changes for repository {repo.name}")
-            except subprocess.CalledProcessError:
-                print(f"Error pulling repository {repo.name}, skipping")
-        else:
-            print(f"Directory {repo.fpath} exists but is not a git repository, skipping")
-    else:
-        print(f"Repository directory {repo.fpath} does not exist, skipping pull")
-
-def main():
-    args: argparse.Namespace = get_args()
-    settings_file: str = args.settings_file
-    if not os.path.isfile(settings_file):
-        print(f"Settings file {settings_file} not found")
-        return
-    dirs_to_create, git_repos = get_dirs_and_repoinfos_from_settings(settings_file)
-    create_directories(dirs_to_create)
-
-    # Clone repositories
-    for repo in git_repos:
-        clone_repo(repo)
-    # Pull updates if requested
-    if args.pull or args.forcepull:
+    # Perform cloning if requested
+    if args.clone:
         for repo in git_repos:
-            pull_repo(repo, args.forcepull)
+            clone_repo(repo, force=args.force)
+
+    # Perform pulling if requested
+    if args.pull:
+        for repo in git_repos:
+            pull_repo(repo, force=args.force)
 
 if __name__ == '__main__':
     main()
