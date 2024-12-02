@@ -7,7 +7,7 @@ import shutil
 import sys
 from typing import Dict, Any, Optional, List, Set, Tuple
 
-def get_repo_name(git_url):
+def get_repo_name(git_url: str) -> str:
     if git_url.endswith('.git'):
         git_url = git_url[:-4]
     repo_name = git_url.split('/')[-1]
@@ -169,7 +169,7 @@ def get_dirs_and_repos_from_settings(settings_file: str) -> Tuple[Set[str], List
                 dirs_to_create.add(path)
     return dirs_to_create, git_repos
 
-def main():
+def main() -> None:
     # check for required external programs
     if not shutil.which('git'):
         print("Error: 'git' is not installed or not found in PATH. Please install 'git' before running this script.")
