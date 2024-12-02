@@ -3,10 +3,14 @@
 import os
 import subprocess
 import argparse
+import shutil
+import sys
 from typing import Dict, Any, Optional, List, Set, Tuple
 
 def get_repo_name(git_url):
-    repo_name = git_url.rstrip('.git').split('/')[-1]
+    if git_url.endswith('.git'):
+        git_url = git_url[:-4]
+    repo_name = git_url.split('/')[-1]
     if ':' in repo_name:
         repo_name = repo_name.split(':')[-1]
     return repo_name
@@ -65,7 +69,7 @@ def clone_repo(repo: Dict[str, str], force: bool = False) -> None:
         if force:
             # Remove the existing directory
             try:
-                subprocess.check_call(['rm', '-rf', full_repo_path])
+                shutil.rmtree(full_repo_path)
                 print(f"Removed existing directory {full_repo_path}")
                 exists = False  # Directory has been removed
             except subprocess.CalledProcessError:
@@ -146,10 +150,11 @@ def get_dirs_and_repos_from_settings(settings_file: str) -> Tuple[Set[str], List
                 stack.pop()
             stack.append(content)
             # Now construct the path
-            if '.git' in content or content.startswith('git@') or content.startswith('https://'):
+            if content.endswith('.git') and (content.startswith('git@') or content.startswith('https://')):
                 # This is a git repository
                 # The parent path is the current stack
                 path = os.path.join(*stack[:-1])
+                path = os.path.expanduser(path) # Expand ~
                 git_url = content
                 # Ensure directory is added
                 dirs_to_create.add(path)
@@ -160,10 +165,16 @@ def get_dirs_and_repos_from_settings(settings_file: str) -> Tuple[Set[str], List
             else:
                 # This is a directory
                 path = os.path.join(*stack)
+                path = os.path.expanduser(path) # Expand ~
                 dirs_to_create.add(path)
     return dirs_to_create, git_repos
 
 def main():
+    # check for required external programs
+    if not shutil.which('git'):
+        print("Error: 'git' is not installed or not found in PATH. Please install 'git' before running this script.")
+        sys.exit(1)
+
     args = get_args()
     settings_file = args.settings_file
     dirs_to_create, git_repos = get_dirs_and_repos_from_settings(settings_file)

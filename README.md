@@ -1,6 +1,10 @@
 # GitInit
 GitInit is a simple tool to help you migrate your complicated project directories and keep them up to date. It will automatically clone the repos according to a directory structure specified in settings.txt.
+## Dependencies
+This tool depends on the following external programs:
+1. git (can be installed via `sudo apt install git` on Ubuntu)
 ## Usage
+1. Install dependencies mentioned above.
 1. Create a settings.txt in the following format:
     ```
     base_folder_1
@@ -21,11 +25,12 @@ GitInit is a simple tool to help you migrate your complicated project directorie
         git@addr:example7.git
     ```
     Note that `base_folder_1` and `base_folder_2` are *absolute* paths, whereas folders inside them are relative paths. There can be multiple root level folders specified in the same file like this.
-2. Run `python3 gitinit.py settings.txt --clone`. The tool will:
+1. Sort out `git` permissions / passwords or create ssh keys, as this tool will run `git clone` and `git pull` commands for you.
+1. Run `python3 gitinit.py settings.txt --clone`. The tool will:
     - Automatically create the directories for you. If a directory already exists, it will skip the creation.
     - Automatically run `git clone` commands for you. If a directory already contains a git repository with the same remote, it will skip the cloning.
     - To force clone, you should run `python3 gitinit.py settings.txt --clone --force`. It is equivalent of running `rm -rf` on the directory and then cloning the repository.
-You can use both `https` and `ssh` links, but you must sort out git permissions / passwords or create ssh keys first. According to the `settings.txt` file above, the created folder structure will be:
+    - You can use both `https` and `ssh` links. According to the `settings.txt` file above, the created folder structure will be:
         - base_folder_1
             - example1
             - folderA
@@ -42,7 +47,7 @@ You can use both `https` and `ssh` links, but you must sort out git permissions 
             - folderC
         - base_folder_2
             - example7
-3. To keep the directory structures up to date, run `python3 gitinit.py settings.txt --pull`. 
+1. To keep the directory structures up to date, run `python3 gitinit.py settings.txt --pull`. 
     - The tool will automatically run `git pull` commands for you inside each git directory specified. On error, the tool will skip the directory.
     - To force pull and discard local changes, you should run `python3 gitinit.py settings.txt --pull --force`. It is equivalent of running `git stash` and then `git stash drop`, followed by `git pull`.
 
