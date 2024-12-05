@@ -5,6 +5,7 @@ This tool depends on the following external programs:
 1. git (can be installed via `sudo apt install git` on Ubuntu)
 ## Usage
 1. Install dependencies mentioned above.
+1. Create a symbolic link to the script in your path. For example, you can run `ln -s /path/to/gitinit.py /usr/local/bin/gitinit` to create a symbolic link in `/usr/local/bin/`.
 1. Create a settings.txt in the following format:
     ```
     base_folder_1
